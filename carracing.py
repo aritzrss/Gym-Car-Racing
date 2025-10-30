@@ -469,13 +469,184 @@ def train_with_best_params(
     
     return model
 
+def test_model(
+    model_path,
+    n_episodes=10,
+    render=True,
+    record_video=False,
+    video_folder="./videos",
+    deterministic=True,
+):
+    """
+    Test a trained model and visualize results
+    
+    Args:
+        model_path: Path to the trained model (.zip file)
+        n_episodes: Number of test episodes
+        render: Whether to render the environment (human view)
+        record_video: Whether to record video of the episodes
+        video_folder: Folder to save videos
+        deterministic: Use deterministic policy (recommended for testing)
+    """
+    from collections import deque
+    import time
+    
+    print("="*70)
+    print("TESTING TRAINED MODEL")
+    print("="*70)
+    print(f"Model: {model_path}")
+    print(f"Episodes: {n_episodes}")
+    print(f"Deterministic: {deterministic}")
+    print(f"Render: {render}")
+    print(f"Record video: {record_video}")
+    print("="*70 + "\n")
+    
+    # Load the model
+    print("Loading model...")
+    model = PPO.load(model_path)
+    print("✓ Model loaded\n")
+    
+    # Create environment
+    render_mode = "human" if render else "rgb_array" if record_video else None
+    
+    if record_video:
+        os.makedirs(video_folder, exist_ok=True)
+        from gymnasium.wrappers import RecordVideo
+        env = gym.make('CarRacing-v3', continuous=True, render_mode="rgb_array")
+        env = RecordVideo(env, video_folder, episode_trigger=lambda x: True)
+    else:
+        env = gym.make('CarRacing-v3', continuous=True, render_mode=render_mode)
+    
+    # Frame stacking wrapper to match training
+    class FrameStackWrapper(gym.Wrapper):
+        def __init__(self, env, num_stack=4):
+            super().__init__(env)
+            self.num_stack = num_stack
+            self.frames = deque(maxlen=num_stack)
+            
+            original_shape = self.observation_space.shape
+            new_shape = (original_shape[0], original_shape[1], original_shape[2] * num_stack)
+            
+            self.observation_space = gym.spaces.Box(
+                low=0,
+                high=255,
+                shape=new_shape,
+                dtype=np.uint8
+            )
+        
+        def reset(self, **kwargs):
+            obs, info = self.env.reset(**kwargs)
+            for _ in range(self.num_stack):
+                self.frames.append(obs)
+            return self._get_obs(), info
+        
+        def step(self, action):
+            obs, reward, terminated, truncated, info = self.env.step(action)
+            self.frames.append(obs)
+            return self._get_obs(), reward, terminated, truncated, info
+        
+        def _get_obs(self):
+            assert len(self.frames) == self.num_stack
+            return np.concatenate(list(self.frames), axis=-1)
+    
+    env = FrameStackWrapper(env, num_stack=4)
+    
+    # Test the model
+    rewards = []
+    episode_lengths = []
+    
+    print("Starting evaluation...\n")
+    
+    for episode in range(n_episodes):
+        obs, info = env.reset()
+        episode_reward = 0
+        episode_length = 0
+        done = False
+        
+        start_time = time.time()
+        
+        while not done:
+            action, _states = model.predict(obs, deterministic=deterministic)
+            obs, reward, terminated, truncated, info = env.step(action)
+            episode_reward += reward
+            episode_length += 1
+            done = terminated or truncated
+            
+            if render and episode_length % 10 == 0:
+                # Optional: display current stats on screen
+                pass
+        
+        elapsed = time.time() - start_time
+        
+        rewards.append(episode_reward)
+        episode_lengths.append(episode_length)
+        
+        # Determine success (reward >= 900 is considered solved)
+        status = "✓ SOLVED" if episode_reward >= 900 else "✗ Not solved"
+        
+        print(f"Episode {episode + 1:2d}/{n_episodes}: "
+              f"Reward = {episode_reward:7.2f} | "
+              f"Length = {episode_length:4d} steps | "
+              f"Time = {elapsed:5.1f}s | "
+              f"{status}")
+    
+    env.close()
+    
+    # Calculate statistics
+    mean_reward = np.mean(rewards)
+    std_reward = np.std(rewards)
+    min_reward = np.min(rewards)
+    max_reward = np.max(rewards)
+    mean_length = np.mean(episode_lengths)
+    
+    solved_count = sum(1 for r in rewards if r >= 900)
+    success_rate = (solved_count / n_episodes) * 100
+    
+    # Print summary
+    print("\n" + "="*70)
+    print("EVALUATION SUMMARY")
+    print("="*70)
+    print(f"Episodes evaluated: {n_episodes}")
+    print(f"\nReward Statistics:")
+    print(f"  Mean reward:   {mean_reward:.2f} ± {std_reward:.2f}")
+    print(f"  Min reward:    {min_reward:.2f}")
+    print(f"  Max reward:    {max_reward:.2f}")
+    print(f"\nPerformance:")
+    print(f"  Mean episode length: {mean_length:.1f} steps")
+    print(f"  Solved episodes (≥900): {solved_count}/{n_episodes} ({success_rate:.1f}%)")
+    
+    if mean_reward >= 900:
+        print(f"\n🏆 ENVIRONMENT SOLVED! Average reward: {mean_reward:.2f}")
+    elif mean_reward >= 850:
+        print(f"\n🎯 Near solution! Average reward: {mean_reward:.2f}")
+    elif mean_reward >= 700:
+        print(f"\n📈 Good performance! Average reward: {mean_reward:.2f}")
+    elif mean_reward >= 500:
+        print(f"\n🔄 Moderate performance. Average reward: {mean_reward:.2f}")
+    else:
+        print(f"\n⚠️  Needs more training. Average reward: {mean_reward:.2f}")
+    
+    if record_video:
+        print(f"\n📹 Videos saved to: {video_folder}")
+    
+    print("="*70 + "\n")
+    
+    return {
+        "mean_reward": mean_reward,
+        "std_reward": std_reward,
+        "min_reward": min_reward,
+        "max_reward": max_reward,
+        "mean_length": mean_length,
+        "success_rate": success_rate,
+        "rewards": rewards,
+    }
 
 if __name__ == "__main__":
     
     parser = argparse.ArgumentParser(description="Max Performance + Optuna HPO for CarRacing-v3")
     parser.add_argument("--mode", type=str, default="optimize",
-                        choices=["optimize", "train_best", "quick_optimize"],
-                        help="Mode: optimize hyperparameters or train with best")
+                        choices=["optimize", "train_best", "quick_optimize", "test"],
+                        help="Mode: optimize hyperparameters, train with best, or test model")
     parser.add_argument("--n_trials", type=int, default=20,
                         help="Number of Optuna trials")
     parser.add_argument("--n_jobs", type=int, default=1,
@@ -490,9 +661,31 @@ if __name__ == "__main__":
     parser.add_argument("--final_timesteps", type=int, default=2_500_000,
                         help="Timesteps for final training with best params")
     
+    # Test mode arguments
+    parser.add_argument("--model_path", type=str, default="./models_maxperf_optimized/best_model/best_model.zip",
+                        help="Path to model for testing")
+    parser.add_argument("--n_test_episodes", type=int, default=10,
+                        help="Number of test episodes")
+    parser.add_argument("--no_render", action="store_true",
+                        help="Disable rendering during testing")
+    parser.add_argument("--record_video", action="store_true",
+                        help="Record video of test episodes")
+    parser.add_argument("--video_folder", type=str, default="./videos",
+                        help="Folder to save videos")
+    
     args = parser.parse_args()
     
-    if args.mode == "quick_optimize":
+    if args.mode == "test":
+        # Test a trained model
+        test_model(
+            model_path=args.model_path,
+            n_episodes=args.n_test_episodes,
+            render=not args.no_render,
+            record_video=args.record_video,
+            video_folder=args.video_folder,
+        )
+        
+    elif args.mode == "quick_optimize":
         # Quick optimization: fewer trials, shorter training
         print("Quick optimization mode: 10 trials, 500K timesteps each\n")
         study = optimize_hyperparameters(
