@@ -22,7 +22,9 @@ import json
 from datetime import datetime
 import argparse
 import optuna.visualization as vis
-
+from collections import deque
+import time
+from gymnasium.wrappers import RecordVideo
 
 def make_env(seed=0):
     """Create and wrap the CarRacing-v3 environment"""
@@ -488,9 +490,7 @@ def test_model(
         video_folder: Folder to save videos
         deterministic: Use deterministic policy (recommended for testing)
     """
-    from collections import deque
-    import time
-    
+        
     print("="*70)
     print("TESTING TRAINED MODEL")
     print("="*70)
@@ -511,7 +511,6 @@ def test_model(
     
     if record_video:
         os.makedirs(video_folder, exist_ok=True)
-        from gymnasium.wrappers import RecordVideo
         env = gym.make('CarRacing-v3', continuous=True, render_mode="rgb_array")
         env = RecordVideo(env, video_folder, episode_trigger=lambda x: True)
     else:
