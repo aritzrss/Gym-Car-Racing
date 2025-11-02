@@ -1,5 +1,5 @@
 {
-  "best_reward": 471.270263671875,
+  "best_reward": 704.629638671875,
   "best_params": {
     "learning_rate": 5.6115164153345e-05,
     "n_steps": 256,
@@ -10,7 +10,7 @@
     "ent_coef": 1.1916299962955139e-05
   },
   "best_trial_number": 0,
-  "n_trials_completed": 1,
+  "n_trials_completed": 2,
   "n_trials_pruned": 0,
-  "timestamp": "2025-10-30T20:00:59.987795"
+  "timestamp": "2025-10-31T21:18:24.548888"
 }
