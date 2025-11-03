@@ -1,16 +1,12 @@
 {
-  "best_reward": 704.629638671875,
+  "best_reward": 845.2786254882812,
   "best_params": {
     "learning_rate": 5.6115164153345e-05,
     "n_steps": 256,
-    "batch_size": 128,
-    "n_epochs": 14,
-    "gamma": 0.9796888677274068,
-    "gae_lambda": 0.9637265320016442,
-    "ent_coef": 1.1916299962955139e-05
+    "ent_coef": 3.776663327107335e-05
   },
   "best_trial_number": 0,
-  "n_trials_completed": 2,
-  "n_trials_pruned": 0,
-  "timestamp": "2025-10-31T21:18:24.548888"
+  "n_trials_completed": 3,
+  "n_trials_pruned": 1,
+  "timestamp": "2025-11-02T23:14:51.615806"
 }
